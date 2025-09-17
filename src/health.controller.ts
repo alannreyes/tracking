@@ -144,6 +144,19 @@ export class HealthController {
           data: step2.recordset
         };
 
+        // Paso 2b: Ver TODOS los ítems disponibles para esta orden (sin filtro de ítem)
+        const step2b = await this.mssqlService.query(`
+          SELECT pe2_unique, pe2_numitm, pe2_tipdoc, pe2_numped
+          FROM desarrollo.dbo.pe2000 
+          WHERE pe2_tipdoc = '${orderData.pe1_tipdoc}' 
+            AND pe2_numped = '${orderData.pe1_numped}'
+        `);
+        results.steps.step2b_all_items = {
+          description: 'All available items for this order',
+          count: step2b.recordset?.length || 0,
+          data: step2b.recordset
+        };
+
         // Paso 3: Verificar Detalle_Estacion_Agrupada
         if (step2.recordset && step2.recordset.length > 0) {
           const itemData: any = step2.recordset[0];
