@@ -38,12 +38,20 @@ export class OrderService {
     const itemInfo = this.normalizeItemInput(dto.itemNumber);
     const defaultResponse = this.buildNotFoundResponse(orderNumber);
 
+    this.logger.log(`Processing order: ${orderNumber}, item: ${itemInfo.original}`);
+
     try {
+      // Test de conectividad básico
+      await this.testMssqlConnection();
+      
       const checkpointRow = await this.fetchCheckpointRow(orderNumber, itemInfo.original);
 
       if (!checkpointRow) {
+        this.logger.warn(`No checkpoint data found for order: ${orderNumber}`);
         return defaultResponse;
       }
+
+      this.logger.log(`Found checkpoint data for order ${orderNumber}: checkpoint=${checkpointRow.checkpoint}, estacion=${checkpointRow.Estacion}`);
 
       const statusCliente2 = await this.resolveStatusCliente2(
         checkpointRow.checkpoint,
@@ -56,16 +64,30 @@ export class OrderService {
       const razonSocial = this.normalizeString(checkpointRow.RazonSocial);
       const estado = this.normalizeString(checkpointRow.Estado) ?? 'NO ENCONTRADO';
 
-      return {
+      const response = {
         OrdenCliente: orderNumber,
         RazonSocial: razonSocial,
         Estado: estado,
         StatusCliente2: statusCliente2,
         FechaEstimadaEntrega: fechaEstimadaEntrega
       };
+
+      this.logger.log(`Returning response for order ${orderNumber}:`, JSON.stringify(response));
+      return response;
     } catch (error) {
-      this.logger.error('Error processing order status', error as Error);
+      this.logger.error(`Error processing order status for ${orderNumber}:`, error);
       return defaultResponse;
+    }
+  }
+
+  private async testMssqlConnection(): Promise<void> {
+    try {
+      this.logger.log('Testing MSSQL connection...');
+      const result = await this.mssqlService.query('SELECT 1 as test');
+      this.logger.log(`MSSQL connection test successful: ${JSON.stringify(result.recordset)}`);
+    } catch (error) {
+      this.logger.error('MSSQL connection test failed:', error);
+      throw error;
     }
   }
 
@@ -103,8 +125,11 @@ export class OrderService {
       { name: 'p_itemNumber', type: sql.NVarChar(50), value: item }
     ];
 
-    const result = await this.mssqlService.query<OrderCheckpointRow>(
-      `DECLARE @order  varchar(32) = @p_orderNumber;
+    this.logger.log(`Executing checkpoint query for order: ${orderNumber}, item: ${item}`);
+
+    try {
+      const result = await this.mssqlService.query<OrderCheckpointRow>(
+        `DECLARE @order  varchar(32) = @p_orderNumber;
 DECLARE @itemS  nvarchar(50) = @p_itemNumber;
 DECLARE @item   int = TRY_CONVERT(int, NULLIF(NULLIF(@itemS, ''), 'null'));
  
@@ -140,14 +165,21 @@ OUTER APPLY (
       AND ( @item IS NULL OR b.pe2_numitm = @item )
     ORDER BY a.pedido_checkpoint_valor DESC
 ) x;`,
-      inputs
-    );
+        inputs
+      );
 
-    if (!result.recordset || result.recordset.length === 0) {
+      this.logger.log(`Checkpoint query returned ${result.recordset?.length || 0} rows`);
+      
+      if (result.recordset && result.recordset.length > 0) {
+        this.logger.log(`First row data:`, JSON.stringify(result.recordset[0]));
+        return result.recordset[0];
+      }
+
       return null;
+    } catch (error) {
+      this.logger.error(`Error in checkpoint query for order ${orderNumber}:`, error);
+      throw error;
     }
-
-    return result.recordset[0];
   }
 
   private async fetchEstimatedDate(orderNumber: string, item: string | null): Promise<string | null> {
@@ -200,6 +232,8 @@ ORDER BY a.pedido_checkpoint_valor DESC;`,
       actividad: this.normalizeForMatch(actividad)
     };
 
+    this.logger.log(`Resolving StatusCliente2 with: checkpoint=${normalized.checkpoint}, estacion=${normalized.estacion}, actividad=${normalized.actividad}`);
+
     const queries: Array<{
       fields: Array<keyof typeof normalized>;
       text: string;
@@ -247,6 +281,7 @@ LIMIT 1;`
       const params = values as string[];
 
       try {
+        this.logger.log(`Trying PostgreSQL query with params: ${JSON.stringify(params)}`);
         const result = await this.postgresService.query<{ status_cliente_2: string }>(
           query.text,
           params
@@ -255,6 +290,7 @@ LIMIT 1;`
         if (result.rows.length > 0) {
           const status = this.normalizeString(result.rows[0].status_cliente_2);
           if (status) {
+            this.logger.log(`Found status: ${status}`);
             return status;
           }
         }
@@ -264,6 +300,7 @@ LIMIT 1;`
       }
     }
 
+    this.logger.log(`No status found, returning default: ${defaultStatus}`);
     return defaultStatus;
   }
 
