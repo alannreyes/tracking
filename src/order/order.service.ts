@@ -120,53 +120,37 @@ export class OrderService {
   }
 
   private async fetchCheckpointRow(orderNumber: string, item: string | null): Promise<OrderCheckpointRow | null> {
-    const inputs = [
-      { name: 'p_orderNumber', type: sql.VarChar(32), value: orderNumber },
-      { name: 'p_itemNumber', type: sql.NVarChar(50), value: item }
-    ];
-
     this.logger.log(`Executing checkpoint query for order: ${orderNumber}, item: ${item}`);
 
     try {
-      const result = await this.mssqlService.query<OrderCheckpointRow>(
-        `DECLARE @order  varchar(32) = @p_orderNumber;
-DECLARE @itemS  nvarchar(50) = @p_itemNumber;
-DECLARE @item   int = TRY_CONVERT(int, NULLIF(NULLIF(@itemS, ''), 'null'));
- 
-SELECT 
-    x.PE1_NUMORD            AS OrdenCliente,
-    CASE WHEN @item IS NULL THEN NULL ELSE x.PE2_NUMITM END AS NumItem,
-    x.pedido_checkpoint_valor                 AS Fecha,
-    x.nombre_usuario                          AS [checkpoint],
-    x.Estacion,
-    x.Actividad,
-    x.CLI_RZNSOC                              AS RazonSocial,
-    x.Pedido_Estado_Item                      AS Estado
-FROM (VALUES (1)) v(dummy)
-OUTER APPLY (
-    SELECT TOP (1)
-        c.PE1_NUMORD, 
-        b.PE2_NUMITM,
-        d.CLI_RZNSOC,
-        a.pedido_checkpoint_valor,
-        a.nombre_usuario,
-        a.Estacion,
-        a.Actividad,
-        a.Pedido_Estado_Item
-    FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
-    JOIN desarrollo.dbo.pe2000 b 
-        ON a.Pedido_Unico = b.pe2_unique
-    JOIN desarrollo.dbo.pe1000 c 
-        ON b.pe2_tipdoc = c.pe1_tipdoc 
-       AND b.pe2_numped = c.pe1_numped
-    JOIN desarrollo.dbo.cl0000 d 
-        ON c.PE1_CODCLI = d.CLI_CODIGO
-    WHERE LTRIM(RTRIM(c.pe1_numord)) = LTRIM(RTRIM(@order))
-      AND ( @item IS NULL OR b.pe2_numitm = @item )
-    ORDER BY a.pedido_checkpoint_valor DESC
-) x;`,
-        inputs
-      );
+      // Simplificar la consulta usando template literals
+      const itemValue = item ? parseInt(item, 10) : null;
+      const query = `
+        SELECT TOP (1)
+            c.PE1_NUMORD AS OrdenCliente,
+            ${itemValue ? 'b.PE2_NUMITM' : 'NULL'} AS NumItem,
+            a.pedido_checkpoint_valor AS Fecha,
+            a.nombre_usuario AS [checkpoint],
+            a.Estacion,
+            a.Actividad,
+            d.CLI_RZNSOC AS RazonSocial,
+            a.Pedido_Estado_Item AS Estado
+        FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
+        JOIN desarrollo.dbo.pe2000 b 
+            ON a.Pedido_Unico = b.pe2_unique
+        JOIN desarrollo.dbo.pe1000 c 
+            ON b.pe2_tipdoc = c.pe1_tipdoc 
+           AND b.pe2_numped = c.pe1_numped
+        JOIN desarrollo.dbo.cl0000 d 
+            ON c.PE1_CODCLI = d.CLI_CODIGO
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
+          ${itemValue ? `AND b.pe2_numitm = ${itemValue}` : ''}
+        ORDER BY a.pedido_checkpoint_valor DESC;
+      `;
+
+      this.logger.log(`Executing query: ${query}`);
+
+      const result = await this.mssqlService.query<OrderCheckpointRow>(query);
 
       this.logger.log(`Checkpoint query returned ${result.recordset?.length || 0} rows`);
       
@@ -183,41 +167,46 @@ OUTER APPLY (
   }
 
   private async fetchEstimatedDate(orderNumber: string, item: string | null): Promise<string | null> {
-    const inputs = [
-      { name: 'p_orderNumber', type: sql.VarChar(32), value: orderNumber },
-      { name: 'p_itemNumber', type: sql.NVarChar(50), value: item }
-    ];
+    this.logger.log(`Executing estimated date query for order: ${orderNumber}, item: ${item}`);
 
-    const result = await this.mssqlService.query<EstimatedDateRow>(
-      `DECLARE @order  varchar(32) = @p_orderNumber;
-DECLARE @itemS  nvarchar(50) = @p_itemNumber;
-DECLARE @item   int = TRY_CONVERT(int, NULLIF(NULLIF(@itemS, ''), 'null'));
- 
-SELECT TOP (1)
-    a.pedido_checkpoint_valor AS FechaEstimadaEntrega
-FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
-JOIN desarrollo.dbo.pe2000 b 
-  ON a.Pedido_Unico = b.pe2_unique
-JOIN desarrollo.dbo.pe1000 c 
-  ON b.pe2_tipdoc = c.pe1_tipdoc 
-AND b.pe2_numped = c.pe1_numped
-WHERE LTRIM(RTRIM(c.pe1_numord)) = LTRIM(RTRIM(@order))
-  AND ( @item IS NULL OR b.pe2_numitm = @item )
-  AND (
-        a.nombre_usuario LIKE '%Fecha%Estimad%Entrega%' OR
-        a.Actividad      LIKE '%Estimad%Entrega%' OR
-        a.Estacion       LIKE '%Entrega Estimada%'
-      )
-ORDER BY a.pedido_checkpoint_valor DESC;`,
-      inputs
-    );
+    try {
+      const itemValue = item ? parseInt(item, 10) : null;
+      const query = `
+        SELECT TOP (1)
+            a.pedido_checkpoint_valor AS FechaEstimadaEntrega
+        FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
+        JOIN desarrollo.dbo.pe2000 b 
+          ON a.Pedido_Unico = b.pe2_unique
+        JOIN desarrollo.dbo.pe1000 c 
+          ON b.pe2_tipdoc = c.pe1_tipdoc 
+        AND b.pe2_numped = c.pe1_numped
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
+          ${itemValue ? `AND b.pe2_numitm = ${itemValue}` : ''}
+          AND (
+                a.nombre_usuario LIKE '%Fecha%Estimad%Entrega%' OR
+                a.Actividad      LIKE '%Estimad%Entrega%' OR
+                a.Estacion       LIKE '%Entrega Estimada%'
+              )
+        ORDER BY a.pedido_checkpoint_valor DESC;
+      `;
 
-    if (!result.recordset || result.recordset.length === 0) {
-      return null;
+      this.logger.log(`Executing estimated date query: ${query}`);
+
+      const result = await this.mssqlService.query<EstimatedDateRow>(query);
+
+      if (!result.recordset || result.recordset.length === 0) {
+        this.logger.log(`No estimated date found for order: ${orderNumber}`);
+        return null;
+      }
+
+      const rawDate = result.recordset[0].FechaEstimadaEntrega;
+      const isoDate = this.toIsoString(rawDate);
+      this.logger.log(`Found estimated date for order ${orderNumber}: ${isoDate}`);
+      return isoDate;
+    } catch (error) {
+      this.logger.error(`Error in estimated date query for order ${orderNumber}:`, error);
+      throw error;
     }
-
-    const rawDate = result.recordset[0].FechaEstimadaEntrega;
-    return this.toIsoString(rawDate);
   }
 
   private async resolveStatusCliente2(
