@@ -4,7 +4,7 @@ import { ConfigService } from '../config/config.service';
 
 type SqlInput = {
   name: string;
-  type: sql.ISqlTypeFactory | sql.ISqlType;
+  type: sql.ISqlType | (() => sql.ISqlType);
   value: unknown;
 };
 
@@ -21,7 +21,7 @@ export class MssqlService implements OnModuleDestroy {
     const request = pool.request();
 
     for (const input of inputs) {
-      request.input(input.name, input.type, input.value as never);
+      request.input(input.name, input.type as sql.ISqlType | (() => sql.ISqlType), input.value as any);
     }
 
     return request.query<T>(queryText);
@@ -39,11 +39,11 @@ export class MssqlService implements OnModuleDestroy {
     if (!this.poolPromise) {
       this.poolPromise = new sql.ConnectionPool(this.configService.mssqlConfig)
         .connect()
-        .then((pool) => {
+        .then((pool: sql.ConnectionPool) => {
           this.pool = pool;
           return pool;
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           this.poolPromise = undefined;
           this.logger.error('Error connecting to MSSQL', error as Error);
           throw error;
@@ -53,7 +53,7 @@ export class MssqlService implements OnModuleDestroy {
     return this.poolPromise;
   }
 
-  private async closePool() {
+  private async closePool(): Promise<void> {
     if (this.pool) {
       await this.pool.close();
       this.pool = undefined;
