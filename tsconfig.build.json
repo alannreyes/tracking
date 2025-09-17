@@ -3,7 +3,9 @@
   "compilerOptions": {
     "sourceMap": false,
     "declaration": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "noImplicitAny": false
   },
   "exclude": ["node_modules", "test", "dist", "**/*.spec.ts"]
 }
