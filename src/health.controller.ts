@@ -28,7 +28,8 @@ export class HealthController {
         'estado-pedido': 'POST /estado-pedido',
         'test-db': '/test-db',
         'test-order': '/test-order?order=12345',
-        'validate-sql': '/validate-sql?order=23027832&item=1'
+        'validate-sql': '/validate-sql?order=23027832&item=1',
+        'checkpoints': '/checkpoints?order=112697'
       }
     };
   }
@@ -223,5 +224,81 @@ export class HealthController {
     }
 
     return results;
+  }
+
+  @Get('checkpoints')
+  async getOrderCheckpoints(@Query('order') orderNumber: string = '112697') {
+    if (!orderNumber) {
+      return { error: 'Provide order parameter: /checkpoints?order=112697' };
+    }
+
+    try {
+      // Ver todos los checkpoints para esta orden
+      const result = await this.mssqlService.query(`
+        SELECT 
+            a.pedido_checkpoint_valor AS Fecha,
+            a.nombre_usuario AS checkpoint,
+            a.Estacion,
+            a.Actividad,
+            a.Pedido_Estado_Item AS Estado
+        FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
+        JOIN desarrollo.dbo.pe2000 b 
+            ON a.Pedido_Unico = b.pe2_unique
+        JOIN desarrollo.dbo.pe1000 c 
+            ON b.pe2_tipdoc = c.pe1_tipdoc 
+           AND b.pe2_numped = c.pe1_numped
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
+        ORDER BY a.pedido_checkpoint_valor DESC
+      `);
+
+      return {
+        orderNumber,
+        totalCheckpoints: result.recordset?.length || 0,
+        checkpoints: result.recordset,
+        possibleEstimatedDatePatterns: this.findEstimatedDatePatterns(result.recordset || []),
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        orderNumber,
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  private findEstimatedDatePatterns(checkpoints: any[]): string[] {
+    const patterns: string[] = [];
+    
+    checkpoints.forEach((checkpoint: any) => {
+      const { checkpoint: nombre, Estacion, Actividad } = checkpoint;
+      
+      // Buscar patrones que puedan indicar fecha estimada
+      if (nombre && (
+        nombre.toLowerCase().includes('estimad') ||
+        nombre.toLowerCase().includes('entrega') ||
+        nombre.toLowerCase().includes('fecha') ||
+        nombre.toLowerCase().includes('promesa')
+      )) {
+        patterns.push(`nombre_usuario: "${nombre}"`);
+      }
+      
+      if (Estacion && (
+        Estacion.toLowerCase().includes('estimad') ||
+        Estacion.toLowerCase().includes('entrega')
+      )) {
+        patterns.push(`Estacion: "${Estacion}"`);
+      }
+      
+      if (Actividad && (
+        Actividad.toLowerCase().includes('estimad') ||
+        Actividad.toLowerCase().includes('entrega') ||
+        Actividad.toLowerCase().includes('fecha')
+      )) {
+        patterns.push(`Actividad: "${Actividad}"`);
+      }
+    });
+    
+    return [...new Set(patterns)]; // Remove duplicates
   }
 } 
