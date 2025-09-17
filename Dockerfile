@@ -19,31 +19,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY dist ./dist
 
-# Build args (Easypanel los pasa en build). Los mapeamos a ENV en runtime.
-ARG PORT=3000
-ARG MSSQL_HOST
-ARG MSSQL_DB
-ARG MSSQL_USER
-ARG MSSQL_PASS
-ARG MSSQL_PORT=1433
-ARG PG_HOST
-ARG PG_DB
-ARG PG_USER
-ARG PG_PASS
-ARG PG_PORT=5432
-
-ENV PORT=$PORT \
-    MSSQL_HOST=$MSSQL_HOST \
-    MSSQL_DB=$MSSQL_DB \
-    MSSQL_USER=$MSSQL_USER \
-    MSSQL_PASS=$MSSQL_PASS \
-    MSSQL_PORT=$MSSQL_PORT \
-    PG_HOST=$PG_HOST \
-    PG_DB=$PG_DB \
-    PG_USER=$PG_USER \
-    PG_PASS=$PG_PASS \
-    PG_PORT=$PG_PORT
+# Exponer puerto por defecto (se puede sobrescribir con -e PORT=...)
+EXPOSE 3000
 
 USER node
-EXPOSE 3000
 CMD ["node", "dist/main.js"] 

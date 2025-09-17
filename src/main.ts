@@ -16,6 +16,10 @@ async function bootstrap() {
     })
   );
 
+  // CORS configurable por ENV (opcional)
+  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
+  app.enableCors({ origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : true });
+
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
 }
