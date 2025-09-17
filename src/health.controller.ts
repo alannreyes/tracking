@@ -33,7 +33,7 @@ export class HealthController {
       const allCheckpoints = await this.mssqlService.query(`
         SELECT 
             a.pedido_checkpoint_valor AS Fecha,
-            a.nombre_usuario AS checkpoint,
+            a.nombre_usuario AS [checkpoint],
             a.Estacion,
             a.Actividad,
             a.Pedido_Estado_Item AS Estado,
@@ -64,7 +64,7 @@ export class HealthController {
       const potentialDates = await this.mssqlService.query(`
         SELECT 
             a.pedido_checkpoint_valor AS Fecha,
-            a.nombre_usuario AS checkpoint,
+            a.nombre_usuario AS [checkpoint],
             a.Estacion,
             a.Actividad
         FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
