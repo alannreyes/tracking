@@ -8,6 +8,7 @@ COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi
 
 FROM deps AS builder
+COPY --from=deps /app/node_modules ./node_modules
 COPY tsconfig*.json ./
 COPY src ./src
 RUN npm run build
