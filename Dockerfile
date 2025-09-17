@@ -2,8 +2,10 @@
 
 FROM node:20-alpine AS deps
 WORKDIR /app
+# Asegurar devDependencies disponibles para el build de TypeScript
+ENV NODE_ENV=development
 COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi
 
 FROM deps AS builder
 COPY tsconfig*.json ./
