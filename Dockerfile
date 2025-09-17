@@ -17,7 +17,7 @@ WORKDIR /app
 # Copiamos deps de producción y artefactos
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
-COPY dist ./dist
+COPY --from=builder /app/dist ./dist
 
 # Exponer puerto por defecto (se puede sobrescribir con -e PORT=...)
 EXPOSE 3000
