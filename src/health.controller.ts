@@ -29,6 +29,25 @@ export class HealthController {
   @Get('debug-dates')
   async debugEstimatedDates(@Query('order') orderNumber: string = '112697') {
     try {
+      // Buscar fecha solicitada por el cliente en las tablas principales
+      const orderDates = await this.mssqlService.query(`
+        SELECT 
+            c.pe1_numord AS OrdenCliente,
+            c.pe1_fecped AS FechaPedido,
+            c.pe1_fecent AS FechaEntrega,
+            c.pe1_fecreq AS FechaRequerida,
+            c.pe1_fecpro AS FechaPromesa,
+            b.pe2_fecent AS FechaEntregaItem,
+            b.pe2_fecreq AS FechaRequeridaItem,
+            b.pe2_numitm AS NumItem
+        FROM desarrollo.dbo.pe1000 c 
+        LEFT JOIN desarrollo.dbo.pe2000 b 
+            ON b.pe2_tipdoc = c.pe1_tipdoc 
+           AND b.pe2_numped = c.pe1_numped
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
+        ORDER BY b.pe2_numitm
+      `);
+
       // Ver TODOS los checkpoints para entender qué patrones existen
       const allCheckpoints = await this.mssqlService.query(`
         SELECT 
@@ -36,20 +55,7 @@ export class HealthController {
             a.nombre_usuario AS [checkpoint],
             a.Estacion,
             a.Actividad,
-            a.Pedido_Estado_Item AS Estado,
-            CASE 
-              WHEN a.nombre_usuario LIKE '%Fecha%Estimad%Entrega%' THEN 'MATCH nombre_usuario'
-              WHEN a.Actividad LIKE '%Estimad%Entrega%' THEN 'MATCH Actividad'  
-              WHEN a.Estacion LIKE '%Entrega Estimada%' THEN 'MATCH Estacion'
-              WHEN a.nombre_usuario LIKE '%estimad%' THEN 'PARTIAL nombre_usuario estimad'
-              WHEN a.nombre_usuario LIKE '%entrega%' THEN 'PARTIAL nombre_usuario entrega'
-              WHEN a.nombre_usuario LIKE '%fecha%' THEN 'PARTIAL nombre_usuario fecha'
-              WHEN a.Actividad LIKE '%estimad%' THEN 'PARTIAL Actividad estimad'
-              WHEN a.Actividad LIKE '%entrega%' THEN 'PARTIAL Actividad entrega'
-              WHEN a.Estacion LIKE '%estimad%' THEN 'PARTIAL Estacion estimad'
-              WHEN a.Estacion LIKE '%entrega%' THEN 'PARTIAL Estacion entrega'
-              ELSE 'NO MATCH'
-            END AS PatternMatch
+            a.Pedido_Estado_Item AS Estado
         FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
         JOIN desarrollo.dbo.pe2000 b 
             ON a.Pedido_Unico = b.pe2_unique
@@ -57,47 +63,29 @@ export class HealthController {
             ON b.pe2_tipdoc = c.pe1_tipdoc 
            AND b.pe2_numped = c.pe1_numped
         WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
-        ORDER BY a.pedido_checkpoint_valor DESC
-      `);
-
-      // Buscar específicamente registros que podrían ser fechas estimadas
-      const potentialDates = await this.mssqlService.query(`
-        SELECT 
-            a.pedido_checkpoint_valor AS Fecha,
-            a.nombre_usuario AS [checkpoint],
-            a.Estacion,
-            a.Actividad
-        FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
-        JOIN desarrollo.dbo.pe2000 b 
-            ON a.Pedido_Unico = b.pe2_unique
-        JOIN desarrollo.dbo.pe1000 c 
-            ON b.pe2_tipdoc = c.pe1_tipdoc 
-           AND b.pe2_numped = c.pe1_numped
-        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
-          AND (
-            a.nombre_usuario LIKE '%estimad%' OR
-            a.nombre_usuario LIKE '%entrega%' OR
-            a.nombre_usuario LIKE '%fecha%' OR
-            a.Actividad LIKE '%estimad%' OR
-            a.Actividad LIKE '%entrega%' OR
-            a.Estacion LIKE '%estimad%' OR
-            a.Estacion LIKE '%entrega%'
-          )
         ORDER BY a.pedido_checkpoint_valor DESC
       `);
 
       return {
         orderNumber,
-        totalCheckpoints: allCheckpoints.recordset?.length || 0,
-        allCheckpoints: allCheckpoints.recordset,
-        potentialEstimatedDates: potentialDates.recordset,
-        potentialCount: potentialDates.recordset?.length || 0,
-        currentQuery: `
-          AND (
-            a.nombre_usuario LIKE '%Fecha%Estimad%Entrega%' OR
-            a.Actividad      LIKE '%Estimad%Entrega%' OR
-            a.Estacion       LIKE '%Entrega Estimada%'
-          )`,
+        orderDates: {
+          description: 'Fechas del pedido en tablas principales',
+          data: orderDates.recordset,
+          count: orderDates.recordset?.length || 0
+        },
+        trackingCheckpoints: {
+          description: 'Checkpoints de seguimiento',
+          data: allCheckpoints.recordset,
+          count: allCheckpoints.recordset?.length || 0
+        },
+        possibleDateFields: [
+          'pe1_fecped - Fecha del pedido',
+          'pe1_fecent - Fecha de entrega (cabecera)',
+          'pe1_fecreq - Fecha requerida (cabecera)',
+          'pe1_fecpro - Fecha promesa (cabecera)',
+          'pe2_fecent - Fecha de entrega (ítem)',
+          'pe2_fecreq - Fecha requerida (ítem)'
+        ],
         timestamp: new Date().toISOString()
       };
     } catch (error) {
