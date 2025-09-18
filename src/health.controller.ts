@@ -37,8 +37,6 @@ export class HealthController {
             c.pe1_fecent AS FechaEntrega,
             c.pe1_fecreq AS FechaRequerida,
             c.pe1_fecpro AS FechaPromesa,
-            b.pe2_fecent AS FechaEntregaItem,
-            b.pe2_fecreq AS FechaRequeridaItem,
             b.pe2_numitm AS NumItem
         FROM desarrollo.dbo.pe1000 c 
         LEFT JOIN desarrollo.dbo.pe2000 b 
@@ -46,6 +44,16 @@ export class HealthController {
            AND b.pe2_numped = c.pe1_numped
         WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
         ORDER BY b.pe2_numitm
+      `);
+
+      // Ver todas las columnas disponibles en pe2000 para esta orden
+      const pe2000Columns = await this.mssqlService.query(`
+        SELECT TOP 1 *
+        FROM desarrollo.dbo.pe2000 b
+        JOIN desarrollo.dbo.pe1000 c 
+            ON b.pe2_tipdoc = c.pe1_tipdoc 
+           AND b.pe2_numped = c.pe1_numped
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = '${orderNumber.replace(/'/g, "''")}'
       `);
 
       // Ver TODOS los checkpoints para entender qué patrones existen
@@ -69,9 +77,14 @@ export class HealthController {
       return {
         orderNumber,
         orderDates: {
-          description: 'Fechas del pedido en tablas principales',
+          description: 'Fechas del pedido en pe1000',
           data: orderDates.recordset,
           count: orderDates.recordset?.length || 0
+        },
+        pe2000Sample: {
+          description: 'Columnas disponibles en pe2000',
+          data: pe2000Columns.recordset,
+          count: pe2000Columns.recordset?.length || 0
         },
         trackingCheckpoints: {
           description: 'Checkpoints de seguimiento',
@@ -82,9 +95,7 @@ export class HealthController {
           'pe1_fecped - Fecha del pedido',
           'pe1_fecent - Fecha de entrega (cabecera)',
           'pe1_fecreq - Fecha requerida (cabecera)',
-          'pe1_fecpro - Fecha promesa (cabecera)',
-          'pe2_fecent - Fecha de entrega (ítem)',
-          'pe2_fecreq - Fecha requerida (ítem)'
+          'pe1_fecpro - Fecha promesa (cabecera)'
         ],
         timestamp: new Date().toISOString()
       };
