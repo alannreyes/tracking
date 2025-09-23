@@ -52,7 +52,12 @@ export class OrderService {
         checkpointRow.Actividad
       );
 
-      const fechaEstimadaEntrega = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
+      let fechaEstimadaEntrega = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
+
+      // Si no hay fecha estimada específica, usar la fecha del checkpoint
+      if (!fechaEstimadaEntrega && checkpointRow.Fecha) {
+        fechaEstimadaEntrega = this.formatDateForDisplay(checkpointRow.Fecha);
+      }
 
       const razonSocial = this.normalizeString(checkpointRow.RazonSocial);
       const estado = this.normalizeString(checkpointRow.Estado) ?? 'NO ENCONTRADO';
@@ -178,8 +183,8 @@ export class OrderService {
       }
 
       const rawDate = result.recordset[0].FechaEstimadaEntrega;
-      const isoDate = this.toIsoString(rawDate);
-      return isoDate;
+      const formattedDate = this.formatDateForDisplay(rawDate);
+      return formattedDate;
     } catch (error) {
       this.logger.error(`Error in estimated date query for order ${orderNumber}:`, error);
       throw error;
@@ -292,5 +297,23 @@ LIMIT 1;`
     }
 
     return date.toISOString();
+  }
+
+  private formatDateForDisplay(value: Date | string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    // Formatear como DD/MM/YY
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+
+    return `${day}/${month}/${year}`;
   }
 }
