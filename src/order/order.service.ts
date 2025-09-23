@@ -138,37 +138,25 @@ export class OrderService {
         DECLARE @item   int = TRY_CONVERT(int, NULLIF(NULLIF(@itemS, ''), 'null'));
 
         SELECT
-            x.PE1_NUMORD                              AS OrdenCliente,
-            CASE WHEN @item IS NULL THEN NULL ELSE x.PE2_NUMITM END AS NumItem,
-            x.pedido_checkpoint_valor                 AS Fecha,
-            x.nombre_usuario                          AS [checkpoint],
-            x.Estacion,
-            x.Actividad,
-            x.CLI_RZNSOC                              AS RazonSocial,
-            x.Pedido_Estado_Item                      AS Estado
-        FROM (VALUES (1)) v(dummy)
-        CROSS APPLY (
-            SELECT
-                c.PE1_NUMORD,
-                b.PE2_NUMITM,
-                d.CLI_RZNSOC,
-                a.pedido_checkpoint_valor,
-                a.nombre_usuario,
-                a.Estacion,
-                a.Actividad,
-                a.Pedido_Estado_Item
-            FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
-            JOIN desarrollo.dbo.pe2000 b
-                ON a.Pedido_Unico = b.pe2_unique
-            JOIN desarrollo.dbo.pe1000 c
-                ON b.pe2_tipdoc = c.pe1_tipdoc
-               AND b.pe2_numped = c.pe1_numped
-            JOIN desarrollo.dbo.cl0000 d
-                ON c.PE1_CODCLI = d.CLI_CODIGO
-            WHERE LTRIM(RTRIM(c.pe1_numord)) = LTRIM(RTRIM(@order))
-              AND ( @item IS NULL OR b.pe2_numitm = @item )
-            ORDER BY a.pedido_checkpoint_valor DESC
-        ) x;
+            c.PE1_NUMORD                              AS OrdenCliente,
+            CASE WHEN @item IS NULL THEN NULL ELSE b.PE2_NUMITM END AS NumItem,
+            a.pedido_checkpoint_valor                 AS Fecha,
+            a.nombre_usuario                          AS [checkpoint],
+            a.Estacion,
+            a.Actividad,
+            d.CLI_RZNSOC                              AS RazonSocial,
+            a.Pedido_Estado_Item                      AS Estado
+        FROM EFC_DB_PROD.[IP].[Detalle_Estacion_Agrupada] a
+        JOIN desarrollo.dbo.pe2000 b
+            ON a.Pedido_Unico = b.pe2_unique
+        JOIN desarrollo.dbo.pe1000 c
+            ON b.pe2_tipdoc = c.pe1_tipdoc
+           AND b.pe2_numped = c.pe1_numped
+        JOIN desarrollo.dbo.cl0000 d
+            ON c.PE1_CODCLI = d.CLI_CODIGO
+        WHERE LTRIM(RTRIM(c.pe1_numord)) = LTRIM(RTRIM(@order))
+          AND ( @item IS NULL OR b.pe2_numitm = @item )
+        ORDER BY a.pedido_checkpoint_valor DESC;
       `;
 
       const result = await this.mssqlService.query<OrderCheckpointRow>(query, [
