@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { OrderStatusRequestDto } from './dto/order-status-request.dto';
 import { OrderStatusResponse } from './interfaces/order-status-response.interface';
 import { OrderService } from './order.service';
@@ -11,5 +11,11 @@ export class OrderController {
   @HttpCode(200)
   async getOrderStatus(@Body() body: OrderStatusRequestDto): Promise<OrderStatusResponse[]> {
     return this.orderService.getOrderStatus(body);
+  }
+
+  @Get('debug/diccionario')
+  @HttpCode(200)
+  async getDiccionarioEstaciones() {
+    return this.orderService.getDiccionarioEstaciones();
   }
 }

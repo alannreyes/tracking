@@ -389,4 +389,27 @@ LIMIT 1;`
 
     return `${day}/${month}/${year}`;
   }
+
+  async getDiccionarioEstaciones() {
+    try {
+      const result = await this.postgresService.query<{
+        checkpoint: string;
+        estacion: string;
+        actividad: string;
+        status_cliente_2: string;
+      }>(`
+        SELECT checkpoint, estacion, actividad, status_cliente_2
+        FROM public.diccionario_estaciones
+        ORDER BY status_cliente_2, checkpoint, estacion, actividad
+      `);
+
+      return {
+        total: result.rows.length,
+        registros: result.rows
+      };
+    } catch (error) {
+      this.logger.error('Error fetching diccionario_estaciones:', error);
+      throw error;
+    }
+  }
 }
