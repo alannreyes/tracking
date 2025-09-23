@@ -220,12 +220,17 @@ export class OrderService {
       actividad: this.normalizeForMatch(actividad)
     };
 
+    // Log para debugging
+    this.logger.debug(`Resolving StatusCliente2 for: checkpoint=${normalized.checkpoint}, estacion=${normalized.estacion}, actividad=${normalized.actividad}`);
+
     const queries: Array<{
       fields: Array<keyof typeof normalized>;
       text: string;
+      description: string;
     }> = [
       {
         fields: ['checkpoint', 'estacion', 'actividad'],
+        description: 'Exact match all fields',
         text: `SELECT status_cliente_2
 FROM public.diccionario_estaciones
 WHERE UPPER(TRIM(checkpoint)) = UPPER(TRIM($1))
@@ -235,6 +240,7 @@ LIMIT 1;`
       },
       {
         fields: ['estacion', 'actividad'],
+        description: 'Exact match estacion + actividad',
         text: `SELECT status_cliente_2
 FROM public.diccionario_estaciones
 WHERE UPPER(TRIM(estacion))   = UPPER(TRIM($1))
@@ -243,6 +249,7 @@ LIMIT 1;`
       },
       {
         fields: ['checkpoint', 'estacion'],
+        description: 'Exact match checkpoint + estacion',
         text: `SELECT status_cliente_2
 FROM public.diccionario_estaciones
 WHERE UPPER(TRIM(checkpoint)) = UPPER(TRIM($1))
@@ -251,9 +258,53 @@ LIMIT 1;`
       },
       {
         fields: ['estacion'],
+        description: 'Exact match estacion only',
         text: `SELECT status_cliente_2
 FROM public.diccionario_estaciones
 WHERE UPPER(TRIM(estacion))   = UPPER(TRIM($1))
+LIMIT 1;`
+      },
+      {
+        fields: ['actividad'],
+        description: 'Exact match actividad only',
+        text: `SELECT status_cliente_2
+FROM public.diccionario_estaciones
+WHERE UPPER(TRIM(actividad))  = UPPER(TRIM($1))
+LIMIT 1;`
+      },
+      {
+        fields: ['checkpoint'],
+        description: 'Exact match checkpoint only',
+        text: `SELECT status_cliente_2
+FROM public.diccionario_estaciones
+WHERE UPPER(TRIM(checkpoint)) = UPPER(TRIM($1))
+LIMIT 1;`
+      },
+      {
+        fields: ['estacion'],
+        description: 'LIKE match estacion',
+        text: `SELECT status_cliente_2
+FROM public.diccionario_estaciones
+WHERE UPPER(TRIM(estacion)) LIKE '%' || UPPER(TRIM($1)) || '%'
+   OR UPPER(TRIM($1)) LIKE '%' || UPPER(TRIM(estacion)) || '%'
+LIMIT 1;`
+      },
+      {
+        fields: ['actividad'],
+        description: 'LIKE match actividad',
+        text: `SELECT status_cliente_2
+FROM public.diccionario_estaciones
+WHERE UPPER(TRIM(actividad)) LIKE '%' || UPPER(TRIM($1)) || '%'
+   OR UPPER(TRIM($1)) LIKE '%' || UPPER(TRIM(actividad)) || '%'
+LIMIT 1;`
+      },
+      {
+        fields: ['checkpoint'],
+        description: 'LIKE match checkpoint',
+        text: `SELECT status_cliente_2
+FROM public.diccionario_estaciones
+WHERE UPPER(TRIM(checkpoint)) LIKE '%' || UPPER(TRIM($1)) || '%'
+   OR UPPER(TRIM($1)) LIKE '%' || UPPER(TRIM(checkpoint)) || '%'
 LIMIT 1;`
       }
     ];
@@ -267,6 +318,8 @@ LIMIT 1;`
       const params = values as string[];
 
       try {
+        this.logger.debug(`Trying query: ${query.description} with params: ${JSON.stringify(params)}`);
+
         const result = await this.postgresService.query<{ status_cliente_2: string }>(
           query.text,
           params
@@ -275,15 +328,18 @@ LIMIT 1;`
         if (result.rows.length > 0) {
           const status = this.normalizeString(result.rows[0].status_cliente_2);
           if (status) {
+            this.logger.debug(`Found StatusCliente2: ${status} using ${query.description}`);
             return status;
           }
         }
       } catch (error) {
-        this.logger.error('Error resolving StatusCliente2', error as Error);
-        throw error;
+        this.logger.error(`Error in query ${query.description}:`, error as Error);
+        // Continuar con la siguiente query en lugar de fallar
+        continue;
       }
     }
 
+    this.logger.warn(`No StatusCliente2 found, using default: ${defaultStatus}`);
     return defaultStatus;
   }
 
