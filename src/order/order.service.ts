@@ -45,7 +45,7 @@ export class OrderService {
         return [this.buildNotFoundResponse(orderNumber)];
       }
 
-      const responses = [];
+      const responses: OrderStatusResponse[] = [];
 
       for (const checkpointRow of checkpointRows) {
         const statusCliente2 = await this.resolveStatusCliente2(
