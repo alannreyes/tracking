@@ -9,7 +9,7 @@ export class OrderController {
 
   @Post()
   @HttpCode(200)
-  async getOrderStatus(@Body() body: OrderStatusRequestDto): Promise<OrderStatusResponse> {
+  async getOrderStatus(@Body() body: OrderStatusRequestDto): Promise<OrderStatusResponse[]> {
     return this.orderService.getOrderStatus(body);
   }
 }

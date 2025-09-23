@@ -33,47 +33,57 @@ export class OrderService {
     private readonly postgresService: PostgresService
   ) {}
 
-  async getOrderStatus(dto: OrderStatusRequestDto): Promise<OrderStatusResponse> {
+  async getOrderStatus(dto: OrderStatusRequestDto): Promise<OrderStatusResponse[]> {
     const orderNumber = dto.orderNumber.trim();
     const itemInfo = this.normalizeItemInput(dto.itemNumber);
-    const defaultResponse = this.buildNotFoundResponse(orderNumber);
 
     try {
-      const checkpointRow = await this.fetchCheckpointRow(orderNumber, itemInfo.original);
+      const checkpointRows = await this.fetchCheckpointRows(orderNumber, itemInfo.original);
 
-      if (!checkpointRow) {
+      if (!checkpointRows || checkpointRows.length === 0) {
         this.logger.warn(`No checkpoint data found for order: ${orderNumber}`);
-        return defaultResponse;
+        return [this.buildNotFoundResponse(orderNumber)];
       }
 
-      const statusCliente2 = await this.resolveStatusCliente2(
-        checkpointRow.checkpoint,
-        checkpointRow.Estacion,
-        checkpointRow.Actividad
-      );
+      const responses = [];
 
-      let fechaEstimadaEntrega = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
+      for (const checkpointRow of checkpointRows) {
+        const statusCliente2 = await this.resolveStatusCliente2(
+          checkpointRow.checkpoint,
+          checkpointRow.Estacion,
+          checkpointRow.Actividad
+        );
 
-      // Si no hay fecha estimada específica, usar la fecha del checkpoint
-      if (!fechaEstimadaEntrega && checkpointRow.Fecha) {
-        fechaEstimadaEntrega = this.formatDateForDisplay(checkpointRow.Fecha);
+        let fechaEstimadaEntrega = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
+
+        // Si no hay fecha estimada específica, usar la fecha del checkpoint
+        if (!fechaEstimadaEntrega && checkpointRow.Fecha) {
+          fechaEstimadaEntrega = this.formatDateForDisplay(checkpointRow.Fecha);
+        }
+
+        const razonSocial = this.normalizeString(checkpointRow.RazonSocial);
+        const estado = this.normalizeString(checkpointRow.Estado) ?? 'NO ENCONTRADO';
+
+        const response = {
+          OrdenCliente: orderNumber,
+          NumItem: checkpointRow.NumItem,
+          Fecha: this.formatDateForDisplay(checkpointRow.Fecha),
+          checkpoint: this.normalizeString(checkpointRow.checkpoint),
+          Estacion: this.normalizeString(checkpointRow.Estacion),
+          Actividad: this.normalizeString(checkpointRow.Actividad),
+          RazonSocial: razonSocial,
+          Estado: estado,
+          StatusCliente2: statusCliente2,
+          FechaEstimadaEntrega: fechaEstimadaEntrega
+        };
+
+        responses.push(response);
       }
 
-      const razonSocial = this.normalizeString(checkpointRow.RazonSocial);
-      const estado = this.normalizeString(checkpointRow.Estado) ?? 'NO ENCONTRADO';
-
-      const response = {
-        OrdenCliente: orderNumber,
-        RazonSocial: razonSocial,
-        Estado: estado,
-        StatusCliente2: statusCliente2,
-        FechaEstimadaEntrega: fechaEstimadaEntrega
-      };
-
-      return response;
+      return responses;
     } catch (error) {
       this.logger.error(`Error processing order status for ${orderNumber}:`, error);
-      return defaultResponse;
+      return [this.buildNotFoundResponse(orderNumber)];
     }
   }
 
@@ -89,6 +99,11 @@ export class OrderService {
   private buildNotFoundResponse(orderNumber: string): OrderStatusResponse {
     return {
       OrdenCliente: orderNumber,
+      NumItem: null,
+      Fecha: null,
+      checkpoint: null,
+      Estacion: null,
+      Actividad: null,
       RazonSocial: null,
       Estado: 'NO ENCONTRADO',
       StatusCliente2: 'NO ENCONTRADO',
@@ -114,7 +129,7 @@ export class OrderService {
     return { original: trimmed };
   }
 
-  private async fetchCheckpointRow(orderNumber: string, item: string | null): Promise<OrderCheckpointRow | null> {
+  private async fetchCheckpointRows(orderNumber: string, item: string | null): Promise<OrderCheckpointRow[]> {
     try {
       // Usar el query optimizado del DBA con parámetros
       const query = `
@@ -132,8 +147,8 @@ export class OrderService {
             x.CLI_RZNSOC                              AS RazonSocial,
             x.Pedido_Estado_Item                      AS Estado
         FROM (VALUES (1)) v(dummy)
-        OUTER APPLY (
-            SELECT TOP (1)
+        CROSS APPLY (
+            SELECT
                 c.PE1_NUMORD,
                 b.PE2_NUMITM,
                 d.CLI_RZNSOC,
@@ -161,11 +176,7 @@ export class OrderService {
         { name: 'itemParam', type: sql.NVarChar(50), value: item || 'null' }
       ]);
 
-      if (result.recordset && result.recordset.length > 0) {
-        return result.recordset[0];
-      }
-
-      return null;
+      return result.recordset || [];
     } catch (error) {
       this.logger.error(`Error in checkpoint query for order ${orderNumber}:`, error);
       throw error;
