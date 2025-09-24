@@ -58,7 +58,7 @@ export class OrderService {
 
         // Si no hay fecha estimada específica, usar la fecha del checkpoint
         if (!fechaEstimadaEntrega && checkpointRow.Fecha) {
-          fechaEstimadaEntrega = this.formatDateForDisplay(checkpointRow.Fecha);
+          fechaEstimadaEntrega = checkpointRow.Fecha;
         }
 
         const razonSocial = this.normalizeString(checkpointRow.RazonSocial);
@@ -67,14 +67,14 @@ export class OrderService {
         const response = {
           OrdenCliente: orderNumber,
           NumItem: checkpointRow.NumItem,
-          Fecha: this.formatDateForDisplay(checkpointRow.Fecha),
+          Fecha: checkpointRow.Fecha,  // Sin transformación
           checkpoint: this.normalizeString(checkpointRow.checkpoint),
           Estacion: this.normalizeString(checkpointRow.Estacion),
           Actividad: this.normalizeString(checkpointRow.Actividad),
           RazonSocial: razonSocial,
           Estado: estado,
           StatusCliente2: statusCliente2,
-          FechaEstimadaEntrega: fechaEstimadaEntrega
+          FechaEstimadaEntrega: fechaEstimadaEntrega  // Sin transformación
         };
 
         responses.push(response);
@@ -200,8 +200,7 @@ export class OrderService {
       }
 
       const rawDate = result.recordset[0].FechaEstimadaEntrega;
-      const formattedDate = this.formatDateForDisplay(rawDate);
-      return formattedDate;
+      return rawDate;  // Retornar fecha sin transformación
     } catch (error) {
       this.logger.error(`Error in estimated date query for order ${orderNumber}:`, error);
       throw error;
