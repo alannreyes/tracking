@@ -54,7 +54,7 @@ export class OrderService {
           checkpointRow.Actividad
         );
 
-        let fechaEstimadaEntrega = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
+        let fechaEstimadaEntrega: Date | string | null = await this.fetchEstimatedDate(orderNumber, itemInfo.original);
 
         // Si no hay fecha estimada específica, usar la fecha del checkpoint
         if (!fechaEstimadaEntrega && checkpointRow.Fecha) {
